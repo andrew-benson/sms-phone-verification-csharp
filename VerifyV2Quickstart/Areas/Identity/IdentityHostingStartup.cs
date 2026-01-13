@@ -5,13 +5,17 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using VerifyV2Quickstart.Data;
 
-[assembly: HostingStartup(typeof(VerifyV2Quickstart.Areas.Identity.IdentityHostingStartup))]
+// [assembly: HostingStartup(typeof(VerifyV2Quickstart.Areas.Identity.IdentityHostingStartup))]
+// NOTE: HostingStartup is disabled - all configuration has been consolidated into Program.cs
 namespace VerifyV2Quickstart.Areas.Identity
 {
     public class IdentityHostingStartup : IHostingStartup
     {
         public void Configure(IWebHostBuilder builder)
         {
+            // This class is no longer used - configuration moved to Program.cs
+            // Kept for reference only
+            /*
             builder.ConfigureServices((context, services) => {
                 services.AddIdentity<ApplicationUser, IdentityRole>()
                     .AddEntityFrameworkStores<ApplicationDbContext>();
@@ -33,6 +37,7 @@ namespace VerifyV2Quickstart.Areas.Identity
                 });
 
             });
+            */
         }
     }
 }
