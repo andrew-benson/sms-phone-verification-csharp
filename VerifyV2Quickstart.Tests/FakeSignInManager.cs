@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Moq;
+using NSubstitute;
 using VerifyV2Quickstart.Models;
 
 namespace VerifyV2Quickstart.Tests
@@ -11,11 +11,11 @@ namespace VerifyV2Quickstart.Tests
     public class FakeSignInManager : SignInManager<ApplicationUser>
     {
         public FakeSignInManager() : base(
-            new Mock<FakeUserManager>().Object,
+            Substitute.For<FakeUserManager>(),
             new HttpContextAccessor(),
-            new Mock<IUserClaimsPrincipalFactory<ApplicationUser>>().Object,
-            new Mock<IOptions<IdentityOptions>>().Object,
-            new Mock<ILogger<SignInManager<ApplicationUser>>>().Object,
+            Substitute.For<IUserClaimsPrincipalFactory<ApplicationUser>>(),
+            Substitute.For<IOptions<IdentityOptions>>(),
+            Substitute.For<ILogger<SignInManager<ApplicationUser>>>(),
             null, null)
         {
         }

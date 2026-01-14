@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Moq;
+using NSubstitute;
 using VerifyV2Quickstart.Areas.Identity.Pages.Account;
 using VerifyV2Quickstart.Models;
 using VerifyV2Quickstart.Services;
@@ -17,24 +17,24 @@ namespace VerifyV2Quickstart.Tests.PageModels
 {
     public class RegisterTests
     {
-        private readonly Mock<IVerification> _verificationService;
-        private readonly Mock<FakeSignInManager> _signInManage;
-        private readonly Mock<IUserStore<ApplicationUser>> _userStore;
-        private readonly Mock<ILogger<RegisterModel>> _logger;
+        private readonly IVerification _verificationService;
+        private readonly FakeSignInManager _signInManage;
+        private readonly IUserStore<ApplicationUser> _userStore;
+        private readonly ILogger<RegisterModel> _logger;
 
         public RegisterTests()
         {
-            _userStore = new Mock<IUserStore<ApplicationUser>>();
-            _verificationService = new Mock<IVerification>();
-            _logger = new Mock<ILogger<RegisterModel>>();
-            _signInManage = new Mock<FakeSignInManager>();
+            _userStore = Substitute.For<IUserStore<ApplicationUser>, IUserPasswordStore<ApplicationUser>>();
+            _verificationService = Substitute.For<IVerification>();
+            _logger = Substitute.For<ILogger<RegisterModel>>();
+            _signInManage = Substitute.For<FakeSignInManager>();
         }
 
         private UserManager<ApplicationUser> GetUserManager()
         {
-            var hasher = new Mock<IPasswordHasher<ApplicationUser>>();
+            var hasher = Substitute.For<IPasswordHasher<ApplicationUser>>();
 
-            return new UserManager<ApplicationUser>(_userStore.Object, null, hasher.Object, null,
+            return new UserManager<ApplicationUser>(_userStore, null, hasher, null,
                 null, null, null, null, null);
         }
 
@@ -43,7 +43,7 @@ namespace VerifyV2Quickstart.Tests.PageModels
         public void OnGetReturnUrlIsAssigned()
         {
             // Arrange
-            var registerModel = new RegisterModel(GetUserManager(), _signInManage.Object, _verificationService.Object, _logger.Object);
+            var registerModel = new RegisterModel(GetUserManager(), _signInManage, _verificationService, _logger);
 
             // Act
             registerModel.OnGet("returnUrl");
@@ -55,7 +55,7 @@ namespace VerifyV2Quickstart.Tests.PageModels
         [Fact]
         public async Task OnPostWithInvalidModelStateThenReturnsPage()
         {
-            var registerModel = new RegisterModel(GetUserManager(),_signInManage.Object,  _verificationService.Object, _logger.Object);
+            var registerModel = new RegisterModel(GetUserManager(), _signInManage, _verificationService, _logger);
 
             // Arrange
             registerModel.ModelState.AddModelError("key", "Another error");
@@ -71,13 +71,13 @@ namespace VerifyV2Quickstart.Tests.PageModels
         public async Task OnPostWithValidModelStateAndUserCreationFailsThenReturnsPage()
         {
             // Arrange
-            _userStore.As<IUserPasswordStore<ApplicationUser>>().Setup(x => x.CreateAsync(
-                It.IsAny<ApplicationUser>(), It.IsAny<CancellationToken>()
-            )).ReturnsAsync(
+            ((IUserPasswordStore<ApplicationUser>)_userStore).CreateAsync(
+                Arg.Any<ApplicationUser>(), Arg.Any<CancellationToken>()
+            ).Returns(
                 IdentityResult.Failed(new IdentityError {Code = "1", Description = "Error"})
             );
 
-            var registerModel = new RegisterModel(GetUserManager(), _signInManage.Object, _verificationService.Object, _logger.Object);
+            var registerModel = new RegisterModel(GetUserManager(), _signInManage, _verificationService, _logger);
 
             registerModel.Input = new RegisterModel.InputModel
             {
@@ -96,15 +96,14 @@ namespace VerifyV2Quickstart.Tests.PageModels
         public async Task OnPostWithValidModelAndUserCreatedAndVerificationStartFailsThenInvalidateModel()
         {
             // Arrange
-            _userStore.As<IUserPasswordStore<ApplicationUser>>().Setup(x => x.CreateAsync(
-                It.IsAny<ApplicationUser>(), It.IsAny<CancellationToken>()
-            )).ReturnsAsync(IdentityResult.Success);
+            ((IUserPasswordStore<ApplicationUser>)_userStore).CreateAsync(
+                Arg.Any<ApplicationUser>(), Arg.Any<CancellationToken>()
+            ).Returns(IdentityResult.Success);
 
-            _verificationService.Setup(
-                x => x.StartVerificationAsync(It.IsAny<string>(), It.IsAny<string>())
-            ).ReturnsAsync(new VerificationResult(new List<string> {"Error"}));
+            _verificationService.StartVerificationAsync(Arg.Any<string>(), Arg.Any<string>())
+                .Returns(new VerificationResult(new List<string> {"Error"}));
 
-            var registerModel = new RegisterModel(GetUserManager(), _signInManage.Object, _verificationService.Object, _logger.Object);
+            var registerModel = new RegisterModel(GetUserManager(), _signInManage, _verificationService, _logger);
 
             registerModel.Input = new RegisterModel.InputModel
             {
@@ -117,35 +116,34 @@ namespace VerifyV2Quickstart.Tests.PageModels
             // Assert
             Assert.False(registerModel.ModelState.IsValid);
             Assert.IsType<PageResult>(result);
-            _verificationService.Verify(x => x.StartVerificationAsync("+1234567890", "sms"), Times.Once);
+            _verificationService.Received(1).StartVerificationAsync("+1234567890", "sms");
         }
 
         [Fact]
         public async Task OnPostWithValidModelAndUserCreatedAndVerificationStartedThenRedirectToVerify()
         {
             // Arrange
-            _userStore.As<IUserPasswordStore<ApplicationUser>>().Setup(x => x.CreateAsync(
-                It.IsAny<ApplicationUser>(), It.IsAny<CancellationToken>()
-            )).ReturnsAsync(IdentityResult.Success);
+            ((IUserPasswordStore<ApplicationUser>)_userStore).CreateAsync(
+                Arg.Any<ApplicationUser>(), Arg.Any<CancellationToken>()
+            ).Returns(IdentityResult.Success);
 
-            _verificationService.Setup(
-                x => x.StartVerificationAsync(It.IsAny<string>(), It.IsAny<string>())
-            ).ReturnsAsync(new VerificationResult("SID"));
+            _verificationService.StartVerificationAsync(Arg.Any<string>(), Arg.Any<string>())
+                .Returns(new VerificationResult("SID"));
 
-            var registerModel = new RegisterModel(GetUserManager(), _signInManage.Object, _verificationService.Object, _logger.Object);
+            var registerModel = new RegisterModel(GetUserManager(), _signInManage, _verificationService, _logger);
 
             registerModel.Input = new RegisterModel.InputModel
             {
                 UserName = "username", Password = "Pas$w0rd", FullPhoneNumber = "+1234567890", Channel = "sms"
             };
 
-            var context = new Mock<HttpContext>();
-            context.Setup(x => x.Session).Returns(new Mock<ISession>().Object);
-            registerModel.PageContext.HttpContext = context.Object;
+            var context = Substitute.For<HttpContext>();
+            context.Session.Returns(Substitute.For<ISession>());
+            registerModel.PageContext.HttpContext = context;
 
-            var urlHelper = new Mock<IUrlHelper>();
-            urlHelper.Setup(x => x.Content(It.IsAny<string>())).Returns("redirect");
-            registerModel.Url = urlHelper.Object;
+            var urlHelper = Substitute.For<IUrlHelper>();
+            urlHelper.Content(Arg.Any<string>()).Returns("redirect");
+            registerModel.Url = urlHelper;
 
             // Act
             var result = await registerModel.OnPostAsync("return");
@@ -154,8 +152,8 @@ namespace VerifyV2Quickstart.Tests.PageModels
             Assert.True(registerModel.ModelState.IsValid);
             Assert.IsType<LocalRedirectResult>(result);
             Assert.Equal("redirect", (result as LocalRedirectResult)?.Url);
-            urlHelper.Verify(x => x.Content("~/Identity/Account/Verify/?returnUrl=return"), Times.Once);
-            _verificationService.Verify(x => x.StartVerificationAsync("+1234567890", "sms"), Times.Once);
+            urlHelper.Received(1).Content("~/Identity/Account/Verify/?returnUrl=return");
+            _verificationService.Received(1).StartVerificationAsync("+1234567890", "sms");
         }
     }
 }

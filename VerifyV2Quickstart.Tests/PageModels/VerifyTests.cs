@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Logging;
-using Moq;
+using NSubstitute;
 using VerifyV2Quickstart.Areas.Identity.Pages.Account;
 using VerifyV2Quickstart.Models;
 using VerifyV2Quickstart.Services;
@@ -18,22 +18,22 @@ namespace VerifyV2Quickstart.Tests.PageModels
 {
     public class VerifyTests
     {
-        private readonly Mock<IVerification> _verificationService;
-        private readonly Mock<IUserStore<ApplicationUser>> _userStore;
-        private readonly Mock<ILogger<VerifyModel>> _logger;
+        private readonly IVerification _verificationService;
+        private readonly IUserStore<ApplicationUser> _userStore;
+        private readonly ILogger<VerifyModel> _logger;
 
         public VerifyTests()
         {
-            _userStore = new Mock<IUserStore<ApplicationUser>>();
-            _verificationService = new Mock<IVerification>();
-            _logger = new Mock<ILogger<VerifyModel>>();
+            _userStore = Substitute.For<IUserStore<ApplicationUser>>();
+            _verificationService = Substitute.For<IVerification>();
+            _logger = Substitute.For<ILogger<VerifyModel>>();
         }
 
         private UserManager<ApplicationUser> GetUserManager()
         {
-            var hasher = new Mock<IPasswordHasher<ApplicationUser>>();
+            var hasher = Substitute.For<IPasswordHasher<ApplicationUser>>();
 
-            return new UserManager<ApplicationUser>(_userStore.Object, null, hasher.Object, null,
+            return new UserManager<ApplicationUser>(_userStore, null, hasher, null,
                 null, null, null, null, null);
         }
 
@@ -41,10 +41,10 @@ namespace VerifyV2Quickstart.Tests.PageModels
         public void OnGetReturnUrlIsAssignedAndPageReturned()
         {
             // Arrange
-            var verifyModel = new VerifyModel(GetUserManager(), _verificationService.Object, _logger.Object);
-            var context = new Mock<HttpContext>();
-            context.Setup(x => x.User).Returns(new Mock<ClaimsPrincipal>().Object);
-            verifyModel.PageContext.HttpContext = context.Object;
+            var verifyModel = new VerifyModel(GetUserManager(), _verificationService, _logger);
+            var context = Substitute.For<HttpContext>();
+            context.User.Returns(Substitute.For<ClaimsPrincipal>());
+            verifyModel.PageContext.HttpContext = context;
 
             // Act
             var result = verifyModel.OnGet("returnUrl");
@@ -58,18 +58,17 @@ namespace VerifyV2Quickstart.Tests.PageModels
         public async Task OnPosWithoutLoggedInUserThenRedirectToLogin()
         {
             // Arrange
-            _userStore.Setup(
-                x => x.FindByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())
-            ).ReturnsAsync(new ApplicationUser());
+            _userStore.FindByIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(new ApplicationUser());
 
-            var verifyModel = new VerifyModel(GetUserManager(), _verificationService.Object, _logger.Object);
-            var context = new Mock<HttpContext>();
-            context.Setup(x => x.User).Returns(new Mock<ClaimsPrincipal>().Object);
-            verifyModel.PageContext.HttpContext = context.Object;
+            var verifyModel = new VerifyModel(GetUserManager(), _verificationService, _logger);
+            var context = Substitute.For<HttpContext>();
+            context.User.Returns(Substitute.For<ClaimsPrincipal>());
+            verifyModel.PageContext.HttpContext = context;
 
-            var urlHelper = new Mock<IUrlHelper>();
-            urlHelper.Setup(x => x.Content(It.IsAny<string>())).Returns("redirect");
-            verifyModel.Url = urlHelper.Object;
+            var urlHelper = Substitute.For<IUrlHelper>();
+            urlHelper.Content(Arg.Any<string>()).Returns("redirect");
+            verifyModel.Url = urlHelper;
 
             // Act
             var result = await verifyModel.OnPostAsync("");
@@ -82,21 +81,20 @@ namespace VerifyV2Quickstart.Tests.PageModels
         public async Task OnPostWithLoggedInUserAndInvalidModelStateThenReturnPage()
         {
             // Arrange
-            _userStore.Setup(
-                x => x.FindByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())
-            ).ReturnsAsync(new ApplicationUser());
+            _userStore.FindByIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(new ApplicationUser());
 
-            var verifyModel = new VerifyModel(GetUserManager(), _verificationService.Object, _logger.Object);
-            var context = new Mock<HttpContext>();
-            var session = new Mock<ISession>();
-            var value = (byte[]) null;
-            var principal = new Mock<ClaimsPrincipal>();
-            principal.Setup(x => x.FindFirst(It.IsAny<string>()))
+            var verifyModel = new VerifyModel(GetUserManager(), _verificationService, _logger);
+            var context = Substitute.For<HttpContext>();
+            var session = Substitute.For<ISession>();
+            var principal = Substitute.For<ClaimsPrincipal>();
+            principal.FindFirst(Arg.Any<string>())
                 .Returns(new Claim("name", "John Doe"));
-            session.Setup(x => x.TryGetValue(It.IsAny<string>(), out value)).Returns(false);
-            context.Setup(x => x.Session).Returns(session.Object);
-            context.Setup(x => x.User).Returns(principal.Object);
-            verifyModel.PageContext.HttpContext = context.Object;
+            byte[] value;
+            session.TryGetValue(Arg.Any<string>(), out value).Returns(false);
+            context.Session.Returns(session);
+            context.User.Returns(principal);
+            verifyModel.PageContext.HttpContext = context;
 
             verifyModel.ModelState.AddModelError("key", "Another error");
 
@@ -111,31 +109,29 @@ namespace VerifyV2Quickstart.Tests.PageModels
         public async Task OnPostWithLoggedInUserAndCodeVerificationFailThenModeStateInvalid()
         {
             // Arrange
-            _userStore.Setup(
-                x => x.FindByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())
-            ).ReturnsAsync(new ApplicationUser {PhoneNumber = "+1234567890"});
+            _userStore.FindByIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(new ApplicationUser {PhoneNumber = "+1234567890"});
 
-            var verifyModel = new VerifyModel(GetUserManager(), _verificationService.Object, _logger.Object);
-            var context = new Mock<HttpContext>();
-            var session = new Mock<ISession>();
-            var value = (byte[]) null;
-            var principal = new Mock<ClaimsPrincipal>();
-            principal.Setup(x => x.FindFirst(It.IsAny<string>()))
+            var verifyModel = new VerifyModel(GetUserManager(), _verificationService, _logger);
+            var context = Substitute.For<HttpContext>();
+            var session = Substitute.For<ISession>();
+            var principal = Substitute.For<ClaimsPrincipal>();
+            principal.FindFirst(Arg.Any<string>())
                 .Returns(new Claim("name", "John Doe"));
-            session.Setup(x => x.TryGetValue(It.IsAny<string>(), out value)).Returns(false);
-            context.Setup(x => x.Session).Returns(session.Object);
-            context.Setup(x => x.User).Returns(principal.Object);
+            byte[] value;
+            session.TryGetValue(Arg.Any<string>(), out value).Returns(false);
+            context.Session.Returns(session);
+            context.User.Returns(principal);
 
-            _verificationService.Setup(
-                x => x.CheckVerificationAsync(It.IsAny<string>(), It.IsAny<string>())
-            ).ReturnsAsync(new VerificationResult(new List<string> {"Failed"}));
+            _verificationService.CheckVerificationAsync(Arg.Any<string>(), Arg.Any<string>())
+                .Returns(new VerificationResult(new List<string> {"Failed"}));
 
             verifyModel.Input = new VerifyModel.InputModel
             {
                 Code = "123456"
             };
 
-            verifyModel.PageContext.HttpContext = context.Object;
+            verifyModel.PageContext.HttpContext = context;
 
             // Act
             var result = await verifyModel.OnPostAsync("");
@@ -143,42 +139,40 @@ namespace VerifyV2Quickstart.Tests.PageModels
             // Assert
             Assert.IsType<PageResult>(result);
             Assert.False(verifyModel.ModelState.IsValid);
-            _verificationService.Verify(x => x.CheckVerificationAsync("+1234567890", "123456"), Times.Once);
+            _verificationService.Received(1).CheckVerificationAsync("+1234567890", "123456");
         }
 
         [Fact]
         public async Task OnPostWithLoggedInUserAndCodeVerificationFailThenUserUpdateAndRedirectsHome()
         {
             // Arrange
-            _userStore.Setup(
-                x => x.FindByIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())
-            ).ReturnsAsync(new ApplicationUser {PhoneNumber = "+1234567890"});
+            _userStore.FindByIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(new ApplicationUser {PhoneNumber = "+1234567890"});
 
-            var verifyModel = new VerifyModel(GetUserManager(), _verificationService.Object, _logger.Object);
-            var context = new Mock<HttpContext>();
-            var session = new Mock<ISession>();
-            var value = (byte[]) null;
-            var principal = new Mock<ClaimsPrincipal>();
-            principal.Setup(x => x.FindFirst(It.IsAny<string>()))
+            var verifyModel = new VerifyModel(GetUserManager(), _verificationService, _logger);
+            var context = Substitute.For<HttpContext>();
+            var session = Substitute.For<ISession>();
+            var principal = Substitute.For<ClaimsPrincipal>();
+            principal.FindFirst(Arg.Any<string>())
                 .Returns(new Claim("name", "John Doe"));
-            session.Setup(x => x.TryGetValue(It.IsAny<string>(), out value)).Returns(false);
-            context.Setup(x => x.Session).Returns(session.Object);
-            context.Setup(x => x.User).Returns(principal.Object);
+            byte[] value;
+            session.TryGetValue(Arg.Any<string>(), out value).Returns(false);
+            context.Session.Returns(session);
+            context.User.Returns(principal);
 
-            var urlHelper = new Mock<IUrlHelper>();
-            urlHelper.Setup(x => x.Content(It.IsAny<string>())).Returns("redirect");
-            verifyModel.Url = urlHelper.Object;
+            var urlHelper = Substitute.For<IUrlHelper>();
+            urlHelper.Content(Arg.Any<string>()).Returns("redirect");
+            verifyModel.Url = urlHelper;
 
-            _verificationService.Setup(
-                x => x.CheckVerificationAsync(It.IsAny<string>(), It.IsAny<string>())
-            ).ReturnsAsync(new VerificationResult("SID"));
+            _verificationService.CheckVerificationAsync(Arg.Any<string>(), Arg.Any<string>())
+                .Returns(new VerificationResult("SID"));
 
             verifyModel.Input = new VerifyModel.InputModel
             {
                 Code = "123456"
             };
 
-            verifyModel.PageContext.HttpContext = context.Object;
+            verifyModel.PageContext.HttpContext = context;
 
             // Act
             var result = await verifyModel.OnPostAsync("");
@@ -186,7 +180,7 @@ namespace VerifyV2Quickstart.Tests.PageModels
             // Assert
             Assert.IsType<LocalRedirectResult>(result);
             Assert.True(verifyModel.ModelState.IsValid);
-            _verificationService.Verify(x => x.CheckVerificationAsync("+1234567890", "123456"), Times.Once);
+            _verificationService.Received(1).CheckVerificationAsync("+1234567890", "123456");
         }
     }
 }
